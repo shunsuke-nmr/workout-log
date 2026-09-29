@@ -7,5 +7,6 @@ import './dates.test.js';
 import './progression.test.js';
 import './stats.test.js';
 import './exporter.test.js';
+import './version.test.js';
 
 report();

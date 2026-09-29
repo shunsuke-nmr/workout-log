@@ -81,7 +81,49 @@ async function maybeLoadDemo() {
   await replaceAll(buildDemoData());
 }
 
+/**
+ * Service Worker を登録し、新しい版が届いたら画面下に知らせる。
+ * 切り替えは利用者が［更新］を押したときだけ（記録の途中で勝手に再読み込みしないように）。
+ */
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  let updateRequested = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (updateRequested) location.reload();
+  });
+
+  const showUpdate = (worker) => {
+    const area = document.getElementById('notice-area');
+    if (area.querySelector('.notice-update')) return;
+    area.append(h('div', { class: 'notice notice-update', role: 'status' },
+      h('span', {}, '新しい版があります。'),
+      h('button', {
+        type: 'button',
+        class: 'btn btn-primary',
+        onclick: () => {
+          updateRequested = true;
+          worker.postMessage('skipWaiting');
+        },
+      }, '更新する')));
+  };
+
+  navigator.serviceWorker.register('./sw.js', { scope: './' }).then((reg) => {
+    if (reg.waiting && navigator.serviceWorker.controller) showUpdate(reg.waiting);
+    reg.addEventListener('updatefound', () => {
+      const worker = reg.installing;
+      worker?.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdate(worker);
+      });
+    });
+    // ホーム画面のアプリは開きっぱなしになりやすいので、表に戻るたびに新しい版を確かめる
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(() => {});
+    });
+  }).catch((err) => console.warn('Service Worker を登録できませんでした', err));
+}
+
 async function start() {
+  registerServiceWorker();
   try {
     await initDb();
   } catch (err) {

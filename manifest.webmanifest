@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "筋トレ記録",
+  "short_name": "筋トレ記録",
+  "description": "ジムで重さと回数をすばやく記録し、前回の記録を見ながら重量を伸ばすためのアプリ",
+  "lang": "ja",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f4f6",
+  "theme_color": "#2d6a63",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "./icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -457,3 +457,7 @@ p { margin: 0 0 var(--gap); }
 .stack > p { margin: 0; }
 .notice-inline { margin: 0 0 8px; }
 .notice-link { display: block; color: var(--text); text-decoration: none; }
+
+/* ===== 新しい版のお知らせ ===== */
+.notice-update { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.notice-update .btn { margin-top: 0; }

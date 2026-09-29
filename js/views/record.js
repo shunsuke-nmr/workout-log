@@ -70,9 +70,12 @@ function recordScreen(data, session, rerender) {
   const countByEx = new Map();
   for (const s of sessionSets) countByEx.set(s.exerciseId, (countByEx.get(s.exerciseId) ?? 0) + 1);
 
-  // 初めは、今日まだ記録していない最初の種目を選ぶ
+  // 初めは、今日最後に記録した種目（再読み込みしても続きから）。なければまだ記録していない最初の種目
   if (!exercises.some((e) => e.id === selectedId)) {
-    selectedId = (exercises.find((e) => !countByEx.get(e.id)) ?? exercises[0]).id;
+    const lastSet = [...sessionSets].sort((a, b) => a.createdAt - b.createdAt).at(-1);
+    selectedId = (exercises.find((e) => e.id === lastSet?.exerciseId)
+      ?? exercises.find((e) => !countByEx.get(e.id))
+      ?? exercises[0]).id;
   }
   const ex = exercises.find((e) => e.id === selectedId);
 
