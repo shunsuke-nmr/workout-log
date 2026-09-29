@@ -1,0 +1,29 @@
+# Claude / 作業用ファイル
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+prompt*.md
+*.prompt.md
+notes/
+memo/
+*.local.md
+*.memo.md
+
+# バックアップ・実データ
+workout-log-backup-*.json
+backup*.json
+*.backup.json
+data/
+
+# 秘密情報
+.env
+.env.*
+*.pem
+*.key
+
+# OS / エディタ
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
