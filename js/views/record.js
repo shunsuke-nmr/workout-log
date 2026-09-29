@@ -8,6 +8,7 @@ import {
   isBetter, compareSets, compareSessions,
 } from '../logic/progression.js';
 import { todayStr, formatDate, fmtNum, fmtSet, uid, round2 } from '../util.js';
+import { getBackupStatus, backupWarningText } from '../backup-status.js';
 
 export const title = '記録';
 
@@ -32,10 +33,11 @@ export async function render(root) {
   const data = await loadAll();
   const session = await findActiveSession(data);
   const rerender = () => render(root);
-  clear(root).append(session ? recordScreen(data, session, rerender) : startScreen(data, rerender));
+  const backup = session ? null : await getBackupStatus(data);
+  clear(root).append(session ? recordScreen(data, session, rerender) : startScreen(data, backup, rerender));
 }
 
-function startScreen(data, rerender) {
+function startScreen(data, backup, rerender) {
   const last = [...data.sessions].sort(compareSessions).at(-1);
   let summary = 'まだ記録がありません';
   if (last) {
@@ -46,6 +48,9 @@ function startScreen(data, rerender) {
   return h('div', { class: 'start' },
     h('p', { class: 'start-date' }, formatDate(todayStr(), true)),
     h('p', { class: 'muted' }, summary),
+    backup.warn
+      ? h('a', { class: 'notice notice-warn notice-inline notice-link', href: '#settings' }, backupWarningText(backup), ' 設定からバックアップを保存してください ›')
+      : null,
     button('今日のトレーニング開始', async () => {
       const session = { id: uid(), date: todayStr(), createdAt: Date.now() };
       await put('sessions', session);

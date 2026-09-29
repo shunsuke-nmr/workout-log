@@ -451,3 +451,9 @@ p { margin: 0 0 var(--gap); }
 
 /* ===== 体重・お腹周り ===== */
 .body-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ===== 設定：書き出し・バックアップ ===== */
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.stack > p { margin: 0; }
+.notice-inline { margin: 0 0 8px; }
+.notice-link { display: block; color: var(--text); text-decoration: none; }

@@ -4,6 +4,7 @@ import { initDb, getMeta, requestPersistence, loadAll, replaceAll } from './db.j
 import { h, clear, alertDialog, confirmDialog } from './ui/dom.js';
 import { applyTheme } from './theme.js';
 import { appState } from './state.js';
+import { refreshBackupDot } from './backup-status.js';
 import * as record from './views/record.js';
 import * as historyView from './views/history.js';
 import * as analysis from './views/analysis.js';
@@ -94,6 +95,7 @@ async function start() {
 
   window.addEventListener('hashchange', showView);
   await showView();
+  await refreshBackupDot();
 
   appState.persisted = await requestPersistence();
 }
