@@ -5,5 +5,6 @@
 import { report } from './harness.js';
 import './dates.test.js';
 import './progression.test.js';
+import './stats.test.js';
 
 report();
