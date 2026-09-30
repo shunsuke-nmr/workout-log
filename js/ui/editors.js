@@ -2,7 +2,8 @@
 
 import { put, remove } from '../db.js';
 import { h, stepper, showDialog, toast } from './dom.js';
-import { todayStr, formatDate, fmtNum, isValidDateStr, round2 } from '../util.js';
+import { todayStr, formatDate, isValidDateStr, round2 } from '../util.js';
+import { exKind, weightInputFor } from '../logic/kinds.js';
 
 /** トレーニングの日付を変える。変えたら true */
 export async function editSessionDate(session) {
@@ -24,14 +25,14 @@ export async function editSessionDate(session) {
 /** セットを修正または削除する。変えたら true */
 export async function editSet(set, exercise, index) {
   const step = exercise?.step ?? 2.5;
-  const assist = !!exercise?.assist;
+  const wi = weightInputFor(exKind(exercise));
   const weight = stepper({
     value: set.weight,
     step: () => step,
     min: 0,
     max: 500,
-    label: assist ? '補助の重さ' : '重さ',
-    format: (v) => (assist ? `補助 ${fmtNum(v)} kg` : `${fmtNum(v)} kg`),
+    label: wi.label,
+    format: wi.format,
   });
   const reps = stepper({
     value: set.reps, step: () => 1, min: 1, max: 100, label: '回数', format: (v) => `${v} 回`,

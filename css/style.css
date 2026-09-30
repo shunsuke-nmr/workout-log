@@ -472,3 +472,93 @@ p { margin: 0 0 var(--gap); }
 /* ===== 新しい版のお知らせ ===== */
 .notice-update { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .notice-update .btn { margin-top: 0; }
+
+/* ===== 記録画面：部位 → 種目 ===== */
+.part-tabs {
+  flex: none;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+}
+.part-tab {
+  position: relative;
+  min-height: var(--tap);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.part-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+/* 今日記録した種目がある部位に小さな印 */
+.part-tab.has-sets::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--good);
+}
+.part-tab[aria-pressed="true"].has-sets::after { background: var(--accent-text); }
+.ex-grid {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  max-height: calc(var(--tap) * 3 + 12px); /* 種目が多い部位でも3段まで。それ以上はこの中だけで縦に動かす */
+  overflow-y: auto;
+}
+.ex-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: var(--tap);
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-weight: 600;
+  font-size: 0.88rem;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+.ex-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.ex-btn[aria-pressed="true"] .chip-count { background: var(--accent-text); color: var(--accent); }
+.ex-name { overflow-wrap: anywhere; }
+
+/* ===== 設定：種目の一覧（部位ごとに開け閉め） ===== */
+.ex-group { padding: 0 12px; }
+.ex-group-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.ex-group-title::-webkit-details-marker { display: none; }
+.ex-group-title::after { content: "›"; margin-left: auto; font-size: 1.4rem; color: var(--muted); transition: transform 0.15s; }
+.ex-group[open] > .ex-group-title::after { transform: rotate(90deg); }
+.ex-group[open] > .ex-group-title { border-bottom: 1px solid var(--border); }
+.ex-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.ex-item:last-child { border-bottom: none; }
+.ex-item .name { font-weight: 600; overflow-wrap: anywhere; }
+.ex-item.is-hidden .name { color: var(--muted); }
+.ex-item-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ex-item-row .sub { font-size: 0.78rem; color: var(--muted); min-width: 0; }
+.ex-item-actions { display: flex; gap: 6px; flex: none; }
+.toggle-btn { min-width: 76px; color: var(--muted); }
+.toggle-btn.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--good); }
+.kind-help { margin: 6px 0 0; }
+/* ===== 分析：部位 → 種目 ===== */
+.analysis-parts { margin-bottom: 6px; }
+.analysis-ex { max-height: none; margin-bottom: 10px; }

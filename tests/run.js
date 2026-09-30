@@ -6,6 +6,7 @@ import { report } from './harness.js';
 import './dates.test.js';
 import './progression.test.js';
 import './assist.test.js';
+import './kinds.test.js';
 import './defaults.test.js';
 import './stats.test.js';
 import './exporter.test.js';

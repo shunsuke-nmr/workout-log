@@ -7,17 +7,22 @@ import {
   exerciseHistory, previousEntry, bestSet, suggestTarget, meetsTarget, stagnation,
   isBetter, compareSets, compareSessions,
 } from '../logic/progression.js';
-import { todayStr, formatDate, fmtNum, fmtSet, uid, round2 } from '../util.js';
+import { todayStr, formatDate, fmtNum, uid, round2 } from '../util.js';
+import { exKind, fmtSetKind, fmtBestKind, weightInputFor } from '../logic/kinds.js';
+import { PARTS } from '../defaults.js';
 import { getBackupStatus, backupWarningText } from '../backup-status.js';
 
 export const title = '記録';
 
 // 日付を過去に直したセッションでも、始めてからこの時間内なら続けて記録できる
 const ACTIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
-// 初めての種目の入力の初期値
+// 初めての種目の入力の初期値（自重は加重なし）
 const FIRST_INPUT = { weight: 20, reps: 10 };
+const FIRST_INPUT_BODYWEIGHT = { weight: 0, reps: 10 };
 
 let selectedId = null; // 選んでいる種目
+let selectedPart = null; // 選んでいる部位
+const lastInPart = new Map(); // 部位 → その部位で最後に選んだ種目
 const inputs = new Map(); // `${セッションid}:${種目id}` → 入力中の { weight, reps }
 let busy = false; // 二度押しで同じセットが2つ入らないように
 
@@ -63,7 +68,7 @@ function startScreen(data, backup, rerender) {
 function recordScreen(data, session, rerender) {
   const exercises = data.exercises.filter((e) => !e.hidden).sort((a, b) => a.order - b.order);
   if (exercises.length === 0) {
-    return h('p', { class: 'muted' }, '表示する種目がありません。設定で種目を追加してください。');
+    return h('p', { class: 'muted' }, '表示する種目がありません。設定で種目を表示に切り替えてください。');
   }
 
   const sessionSets = data.sets.filter((s) => s.sessionId === session.id);
@@ -79,21 +84,30 @@ function recordScreen(data, session, rerender) {
   }
   const ex = exercises.find((e) => e.id === selectedId);
 
+  // 部位で絞り込む（表示中の種目がある部位だけを出す）
+  const parts = PARTS.filter((p) => exercises.some((e) => e.part === p.id));
+  const extraParts = [...new Set(exercises.map((e) => e.part))].filter((id) => !parts.some((p) => p.id === id))
+    .map((id) => ({ id, label: id })); // 定義にない部位（古いデータなど）も選べるように
+  const allParts = [...parts, ...extraParts];
+  if (!allParts.some((p) => p.id === selectedPart)) selectedPart = ex.part;
+  lastInPart.set(ex.part, ex.id);
+  const partExercises = exercises.filter((e) => e.part === selectedPart);
+
+  const kind = exKind(ex);
+  const fmt = (x) => fmtSetKind(kind, x);
   const history = exerciseHistory(data, ex.id);
   const past = history.filter((e) => e.session.id !== session.id);
   const todaySets = sessionSets.filter((s) => s.exerciseId === ex.id).sort(compareSets);
   const prev = previousEntry(history, session);
-  // 補助の重さを入れる種目（アシスト懸垂など）は、重さが小さいほど良い
-  const assist = !!ex.assist;
-  const target = suggestTarget(prev?.sets, ex.step, assist);
-  const pastBest = bestSet(past.flatMap((e) => e.sets), assist);
-  const todayBest = bestSet(todaySets, assist);
-  const stall = stagnation(past, assist);
-  const wLabel = assist ? '補助' : '';
+  const target = suggestTarget(prev?.sets, ex.step, kind);
+  const pastBest = bestSet(past.flatMap((e) => e.sets), kind);
+  const todayBest = bestSet(todaySets, kind);
+  const stall = stagnation(past, kind);
 
   const key = `${session.id}:${ex.id}`;
   if (!inputs.has(key)) {
-    const base = todaySets.at(-1) ?? target?.sets[0] ?? prev?.sets.at(-1) ?? FIRST_INPUT;
+    const first = kind === 'bodyweight' ? FIRST_INPUT_BODYWEIGHT : FIRST_INPUT;
+    const base = todaySets.at(-1) ?? target?.sets[0] ?? prev?.sets.at(-1) ?? first;
     inputs.set(key, { weight: base.weight, reps: base.reps });
   }
   const input = inputs.get(key);
@@ -113,59 +127,80 @@ function recordScreen(data, session, rerender) {
       };
       await put('sets', set);
       await setMeta('activeSessionId', session.id);
-      const bestSoFar = isBetter(todayBest, pastBest, assist) ? todayBest : pastBest;
-      toast(pastBest && isBetter(set, bestSoFar, assist) ? `自己ベスト更新！ ${fmtSet(set)}` : `記録しました ${fmtSet(set)}`);
+      const bestSoFar = isBetter(todayBest, pastBest, kind) ? todayBest : pastBest;
+      toast(pastBest && isBetter(set, bestSoFar, kind) ? `自己ベスト更新！ ${fmt(set)}` : `記録しました ${fmt(set)}`);
       await rerender();
     } finally {
       busy = false;
     }
   };
 
-  // ── 上部：日付と種目 ──
+  const selectExercise = (id) => {
+    selectedId = id;
+    rerender();
+  };
+
+  // ── 上部：日付 ──
+  const kindBadge = kind === 'assist' ? '補助の重さ・軽いほど良い' : kind === 'bodyweight' ? '自重・回数を記録' : null;
   const head = h('div', { class: 'rec-head' },
     button(formatDate(session.date), async () => { if (await editSessionDate(session)) rerender(); }, 'btn-ghost rec-date', {
       'aria-label': `日付 ${formatDate(session.date)}。押すと変更`,
     }),
-    assist ? h('span', { class: 'badge badge-assist' }, '補助の重さ・軽いほど良い') : null,
+    kindBadge ? h('span', { class: 'badge badge-assist' }, kindBadge) : null,
     h('span', { class: 'muted small' }, `今日 ${sessionSets.length}セット`),
   );
 
-  const chips = h('div', { class: 'chips', role: 'group', 'aria-label': '種目' },
-    exercises.map((e) => h('button', {
-      type: 'button',
-      class: 'chip',
-      'aria-pressed': String(e.id === ex.id),
-      onclick: () => {
-        selectedId = e.id;
-        rerender();
-      },
-    }, e.name, countByEx.get(e.id) ? h('span', { class: 'chip-count', 'aria-label': `${countByEx.get(e.id)}セット済み` }, countByEx.get(e.id)) : null)),
+  // ── 部位 → 種目 ──
+  const partTabs = h('div', { class: 'part-tabs', role: 'group', 'aria-label': '部位' },
+    allParts.map((p) => {
+      const done = exercises.some((e) => e.part === p.id && countByEx.get(e.id));
+      return h('button', {
+        type: 'button',
+        class: `part-tab${done ? ' has-sets' : ''}`,
+        'aria-pressed': String(p.id === selectedPart),
+        'aria-label': `${p.label}${done ? '（今日記録あり）' : ''}`,
+        onclick: () => {
+          selectedPart = p.id;
+          // その部位で前に選んだ種目、なければまだ記録していない最初の種目
+          const inPart = exercises.filter((e) => e.part === p.id);
+          const next = inPart.find((e) => e.id === lastInPart.get(p.id))
+            ?? inPart.find((e) => !countByEx.get(e.id))
+            ?? inPart[0];
+          selectExercise(next.id);
+        },
+      }, p.label);
+    }),
   );
-  // 選んだ種目が見えるように横スクロールを合わせる
-  requestAnimationFrame(() => {
-    const sel = chips.querySelector('[aria-pressed="true"]');
-    if (sel) chips.scrollLeft = sel.offsetLeft - (chips.clientWidth - sel.clientWidth) / 2;
-  });
+  const exGrid = h('div', { class: 'ex-grid', role: 'group', 'aria-label': '種目' },
+    partExercises.map((e) => h('button', {
+      type: 'button',
+      class: 'ex-btn',
+      'aria-pressed': String(e.id === ex.id),
+      onclick: () => selectExercise(e.id),
+    },
+    h('span', { class: 'ex-name' }, e.name),
+    countByEx.get(e.id) ? h('span', { class: 'chip-count', 'aria-label': `${countByEx.get(e.id)}セット済み` }, countByEx.get(e.id)) : null)),
+  );
 
   // ── 中段：前回・目標・自己ベスト ──
   const info = h('dl', { class: 'info card' },
     h('dt', {}, prev ? `前回 ${formatDate(prev.session.date)}` : '前回'),
-    h('dd', { class: 'num' }, prev ? prev.sets.map((s) => h('span', { class: 'tset' }, fmtSet(s))) : 'なし（初めての種目）'),
+    h('dd', { class: 'num' }, prev ? prev.sets.map((s) => h('span', { class: 'tset' }, fmt(s))) : 'なし（初めての種目）'),
     h('dt', {}, '今日の目標'),
     h('dd', { class: 'num' },
       target
         ? [
-          target.kind === 'up' ? h('span', { class: 'badge badge-good' }, assist ? '補助を減らす' : '重さアップ') : null,
+          target.kind === 'up' ? h('span', { class: 'badge badge-good' }, kind === 'assist' ? '補助を減らす' : '重さアップ') : null,
           ' ',
           target.sets.map((t, i) => h('span', {
-            class: `tset${meetsTarget(todaySets[i], t, assist) ? ' done' : ''}`,
-          }, fmtSet(t))),
+            class: `tset${meetsTarget(todaySets[i], t, kind) ? ' done' : ''}`,
+          }, fmt(t))),
         ]
         : h('span', { class: 'muted' }, '記録すると次回から提案します')),
     h('dt', {}, '自己ベスト'),
     h('dd', { class: 'num' },
-      pastBest ? `${wLabel}${fmtNum(pastBest.weight)}kg × ${pastBest.reps}回` : 'なし',
-      todayBest && pastBest && isBetter(todayBest, pastBest, assist) ? [' ', h('span', { class: 'badge badge-good' }, `今日更新 ${fmtSet(todayBest)}`)] : null,
+      fmtBestKind(kind, pastBest),
+      todayBest && pastBest && isBetter(todayBest, pastBest, kind) ? [' ', h('span', { class: 'badge badge-good' }, `今日更新 ${fmt(todayBest)}`)] : null,
       stall.stalled ? [' ', h('span', { class: 'badge badge-warn' }, `停滞中（${stall.streak}回更新なし）`)] : null,
     ),
   );
@@ -173,16 +208,17 @@ function recordScreen(data, session, rerender) {
   // ── 今日のセット（押すと修正・削除） ──
   const today = h('div', { class: 'today', 'aria-label': '今日のセット' },
     todaySets.length
-      ? todaySets.map((s, i) => button([h('span', { class: 'set-no' }, `${i + 1}`), fmtSet(s)], async () => { if (await editSet(s, ex, i)) rerender(); }, 'set-chip', {
-        'aria-label': `${i + 1}セット目 ${wLabel}${fmtNum(s.weight)}キロ ${s.reps}回。押すと修正`,
+      ? todaySets.map((s, i) => button([h('span', { class: 'set-no' }, `${i + 1}`), fmt(s)], async () => { if (await editSet(s, ex, i)) rerender(); }, 'set-chip', {
+        'aria-label': `${i + 1}セット目 ${fmtBestKind(kind, s)}。押すと修正`,
       }))
-      : h('p', { class: 'muted small today-empty' }, '重さと回数を合わせて「セット追加」'),
+      : h('p', { class: 'muted small today-empty' }, kind === 'bodyweight' ? '回数を合わせて「セット追加」' : '重さと回数を合わせて「セット追加」'),
   );
 
   // ── 下半分：入力とボタン ──
+  const wi = weightInputFor(kind);
   const weight = stepper({
-    value: input.weight, step: () => ex.step, min: 0, max: 500, label: assist ? '補助の重さ' : '重さ',
-    format: (v) => (assist ? `補助 ${fmtNum(v)} kg` : `${fmtNum(v)} kg`), onChange: (v) => { input.weight = v; },
+    value: input.weight, step: () => ex.step, min: 0, max: 500, label: wi.label,
+    format: wi.format, onChange: (v) => { input.weight = v; },
   });
   const reps = stepper({
     value: input.reps, step: () => 1, min: 1, max: 100, label: '回数',
@@ -193,10 +229,10 @@ function recordScreen(data, session, rerender) {
     weight.el,
     reps.el,
     h('div', { class: 'rec-actions' },
-      button(last ? ['直前と同じ', h('span', { class: 'sub-label num' }, fmtSet(last))] : '直前と同じ', () => addSet(last), 'btn-lg repeat-btn', { disabled: !last }),
+      button(last ? ['直前と同じ', h('span', { class: 'sub-label num' }, fmt(last))] : '直前と同じ', () => addSet(last), 'btn-lg repeat-btn', { disabled: !last }),
       button('セット追加', () => addSet(input), 'btn-primary btn-lg'),
     ),
   );
 
-  return h('div', { class: 'record' }, head, chips, info, today, controls);
+  return h('div', { class: `record kind-${kind}` }, head, partTabs, exGrid, info, today, controls);
 }

@@ -2,6 +2,8 @@
 // 構造を変えるときは SCHEMA_VERSION を上げ、MIGRATIONS に「ひとつ前の版 → その版」への変換を足す。
 // 起動時（端末内のデータ）と復元時（古いバックアップ）の両方でこの関数を通す。
 
+import { KIND_IDS } from './kinds.js';
+
 export const SCHEMA_VERSION = 1;
 
 export const STORES = ['exercises', 'sessions', 'sets', 'body'];
@@ -46,6 +48,8 @@ export function findInvalid(data) {
     if (!isStr(e.id) || !isStr(e.name) || !isStr(e.part) || !isNum(e.step) || !isNum(e.order)) {
       return `種目のデータが不正です（${e.name ?? e.id}）`;
     }
+    // kind は 1.0.2 から。なくてもよい（1.0.1 までのデータ）
+    if (e.kind != null && !KIND_IDS.includes(e.kind)) return `種目の種類が不正です（${e.name}）`;
   }
   for (const s of data.sessions) {
     if (!isStr(s.id) || !isDate(s.date)) return `トレーニング日のデータが不正です（${s.date ?? s.id}）`;

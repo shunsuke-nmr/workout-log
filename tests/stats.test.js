@@ -10,13 +10,13 @@ import { niceTicks } from '../js/ui/chart.js';
 test('種目の推移：最大重量と総負荷量', () => {
   const data = makeData([['2026-09-01', [[40, 10], [40, 8], [37.5, 10]]]]);
   eq(exerciseSeries(exerciseHistory(data, 'e1')), [
-    { date: '2026-09-01', bestWeight: 40, volume: 1095, totalReps: 28, sets: 3 },
+    { date: '2026-09-01', bestWeight: 40, volume: 1095, maxReps: 10, totalReps: 28, sets: 3 },
   ]);
 });
 
 test('補助の種目の推移：一番良い重さは最小の補助、回数の合計も出す', () => {
   const data = makeData([['2026-09-01', [[25, 8], [22.5, 6], [25, 7]]], ['2026-09-04', [[20, 8], [20, 7]]]]);
-  const series = exerciseSeries(exerciseHistory(data, 'e1'), true);
+  const series = exerciseSeries(exerciseHistory(data, 'e1'), 'assist');
   eq(series.map((p) => [p.bestWeight, p.totalReps]), [[22.5, 21], [20, 15]]);
 });
 

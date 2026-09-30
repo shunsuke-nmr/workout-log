@@ -1,7 +1,8 @@
-// 設定画面：種目の管理、表示テーマ、（段階4で）書き出し・バックアップ。
+// 設定画面：書き出し・バックアップ、種目の管理、表示テーマ、全データ削除。
 
 import { loadAll, put, putMany, getMeta, setMeta, replaceAll, defaultData } from '../db.js';
-import { PARTS, PART_LABEL, WEIGHT_STEPS } from '../defaults.js';
+import { PARTS, PART_LABEL, WEIGHT_STEPS, DEFAULT_EXERCISES } from '../defaults.js';
+import { KINDS, exKind } from '../logic/kinds.js';
 import { h, clear, button, showDialog, confirmDialog, alertDialog, segmented, toast } from '../ui/dom.js';
 import { copyText, saveFile } from '../ui/share.js';
 import { applyTheme } from '../theme.js';
@@ -9,7 +10,7 @@ import { appState } from '../state.js';
 import { APP_VERSION } from '../version.js';
 import { refreshBackupDot, backupWarningText } from '../backup-status.js';
 import {
-  analysisText, buildBackup, backupFileName, parseBackup, mergeData, countData,
+  analysisText, buildBackup, backupFileName, parseBackup, mergeData, countData, missingDefaults,
 } from '../logic/exporter.js';
 import { fmtNum, formatDate, toDateStr, todayStr, uid } from '../util.js';
 
@@ -173,47 +174,102 @@ function sortedExercises(exercises) {
   return [...exercises].sort((a, b) => a.order - b.order);
 }
 
+const openParts = new Set(); // 設定画面で開いている部位
+
+/** 種目の一覧。部位ごとにまとめ、部位の中で並べ替えられる */
 function exerciseSection(exercises, rerender) {
   const list = sortedExercises(exercises);
+  const partIds = [...PARTS.map((p) => p.id), ...new Set(list.map((e) => e.part).filter((id) => !PART_LABEL[id]))];
 
-  const move = async (index, dir) => {
-    const a = list[index];
-    const b = list[index + dir];
-    if (!b) return;
-    // 並び順を振り直してから入れ替える（order の重複や欠番があっても崩れないように）
+  // 同じ部位の中で隣の種目と入れ替える
+  const move = async (ex, dir) => {
+    const group = list.filter((e) => e.part === ex.part);
+    const other = group[group.indexOf(ex) + dir];
+    if (!other) return;
+    // 全体の並び順を振り直してから入れ替える（order の重複や欠番があっても崩れないように）
     const reordered = list.map((e, i) => ({ ...e, order: i }));
-    reordered[index].order = index + dir;
-    reordered[index + dir].order = index;
+    const x = reordered.find((e) => e.id === ex.id);
+    const y = reordered.find((e) => e.id === other.id);
+    [x.order, y.order] = [y.order, x.order];
     await putMany('exercises', reordered);
     rerender();
-    toast(`「${a.name}」を${dir < 0 ? '上' : '下'}へ移動しました`);
+    toast(`「${ex.name}」を${dir < 0 ? '上' : '下'}へ移動しました`);
   };
 
-  const items = list.map((e, i) =>
-    h('li', { class: 'list-item' },
-      h('div', { class: 'list-main' },
-        h('div', { class: 'name' }, e.name, e.hidden ? ' ' : null, e.hidden ? h('span', { class: 'badge' }, '非表示') : null),
-        h('div', { class: 'sub' }, `${PART_LABEL[e.part] ?? e.part}・${fmtNum(e.step)}kg刻み${e.assist ? '・補助の重さ' : ''}`),
+  const toggleHidden = async (ex) => {
+    await put('exercises', { ...ex, hidden: !ex.hidden });
+    toast(ex.hidden ? `「${ex.name}」を記録画面に表示します` : `「${ex.name}」を非表示にしました`);
+    rerender();
+  };
+
+  const item = (e, i, group) => {
+    const kind = exKind(e);
+    const sub = [
+      `${fmtNum(e.step)}kg刻み`,
+      kind === 'assist' ? '補助' : kind === 'bodyweight' ? '自重' : null,
+      e.note || null,
+    ].filter(Boolean).join('・');
+    return h('li', { class: `ex-item${e.hidden ? ' is-hidden' : ''}` },
+      h('div', { class: 'name' }, e.name),
+      h('div', { class: 'ex-item-row' },
+        h('span', { class: 'sub' }, sub),
+        h('div', { class: 'ex-item-actions' },
+        button('↑', () => move(e, -1), 'icon-btn', { 'aria-label': `${e.name}を上へ`, disabled: i === 0 }),
+        button('↓', () => move(e, 1), 'icon-btn', { 'aria-label': `${e.name}を下へ`, disabled: i === group.length - 1 }),
+        h('button', {
+          type: 'button',
+          class: `btn toggle-btn${e.hidden ? '' : ' is-on'}`,
+          'aria-pressed': String(!e.hidden),
+          'aria-label': `${e.name}を記録画面に表示`,
+          onclick: () => toggleHidden(e),
+        }, e.hidden ? '非表示' : '表示中'),
+        button('編集', async () => {
+          if (await editExercise(e, exercises)) rerender();
+        }),
+        ),
       ),
-      button('↑', () => move(i, -1), 'icon-btn', { 'aria-label': `${e.name}を上へ`, disabled: i === 0 }),
-      button('↓', () => move(i, 1), 'icon-btn', { 'aria-label': `${e.name}を下へ`, disabled: i === list.length - 1 }),
-      button('編集', async () => {
-        const saved = await editExercise(e, exercises);
-        if (saved) rerender();
-      }),
-    ),
-  );
+    );
+  };
+
+  const groups = partIds
+    .map((id) => ({ id, items: list.filter((e) => e.part === id) }))
+    .filter((g) => g.items.length > 0);
 
   return h('section', {},
     h('h2', { class: 'section-title' }, '種目'),
-    h('div', { class: 'card' },
-      h('ul', { class: 'list' }, items),
+    h('p', { class: 'muted small' }, '「表示中」の種目だけが記録画面に出ます。押すと切り替わります。'),
+    // 部位ごとに開け閉めできる（開いている部位は画面を描き直しても開いたまま）
+    groups.map((g) => h('details', {
+      class: 'card ex-group',
+      open: openParts.has(g.id),
+      ontoggle: (ev) => { if (ev.target.open) openParts.add(g.id); else openParts.delete(g.id); },
+    },
+    h('summary', { class: 'ex-group-title' }, PART_LABEL[g.id] ?? g.id,
+      h('span', { class: 'muted small' }, `表示中 ${g.items.filter((e) => !e.hidden).length} / ${g.items.length}`)),
+    h('ul', { class: 'list' }, g.items.map((e, i) => item(e, i, g.items))))),
+    h('div', { class: 'card stack' },
       button('＋ 種目を追加', async () => {
-        const saved = await editExercise(null, exercises);
-        if (saved) rerender();
+        if (await editExercise(null, exercises)) rerender();
       }, 'btn-block'),
+      button('足りない初期種目を追加', () => addMissing(exercises, rerender), 'btn-block'),
+      h('p', { class: 'muted small' }, '初期種目のうち、この端末にまだないものだけを足します（非表示のものは非表示のまま）。今の種目と記録は変わりません。'),
     ),
   );
+}
+
+async function addMissing(exercises, rerender) {
+  const missing = missingDefaults(exercises, DEFAULT_EXERCISES);
+  if (missing.length === 0) {
+    await alertDialog('初期種目はすべてそろっています。');
+    return;
+  }
+  const ok = await confirmDialog(`${missing.length}種目を追加します。\n${missing.map((e) => e.name).join('、')}`, {
+    title: '足りない初期種目を追加', ok: '追加する',
+  });
+  if (!ok) return;
+  await putMany('exercises', missing);
+  toast(`${missing.length}種目を追加しました`);
+  rerender();
 }
 
 /** 種目の追加・編集。保存したら true */
@@ -227,18 +283,28 @@ async function editExercise(ex, allExercises) {
     autocomplete: 'off',
     enterkeyhint: 'done',
   });
+  const noteInput = h('input', {
+    class: 'text-input',
+    type: 'text',
+    value: ex?.note ?? '',
+    maxlength: '20',
+    autocomplete: 'off',
+    placeholder: '例：ダンベル、プレート式',
+  });
   const part = segmented(PARTS.map((p) => ({ value: p.id, label: p.label })), ex?.part ?? 'back');
+  const kind = segmented(KINDS.map((k) => ({ value: k.id, label: k.label })), exKind(ex));
   const step = segmented(WEIGHT_STEPS.map((s) => ({ value: s, label: fmtNum(s) })), ex?.step ?? 2.5);
   const hidden = h('input', { type: 'checkbox', checked: !!ex?.hidden });
-  const assist = h('input', { type: 'checkbox', checked: !!ex?.assist });
   const errorEl = h('p', { class: 'error small', role: 'alert' });
   errorEl.hidden = true;
 
   const body = h('div', {},
     h('label', { class: 'field' }, h('span', { class: 'field-label' }, '名前'), nameInput),
     h('div', { class: 'field' }, h('span', { class: 'field-label' }, '部位'), part.el),
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, '種類'), kind.el,
+      h('p', { class: 'muted small kind-help' }, '通常：重さと回数／補助：補助の重さ（軽いほど良い）／自重：回数（重さは加重した分だけ）')),
     h('div', { class: 'field' }, h('span', { class: 'field-label' }, '重さの刻み（kg）'), step.el),
-    h('label', { class: 'check' }, assist, '補助の重さを入れる種目（アシスト懸垂など。軽いほど良い記録）'),
+    h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'メモ（器具など・任意）'), noteInput),
     isNew ? null : h('label', { class: 'check' }, hidden, '記録画面に表示しない'),
     errorEl,
   );
@@ -255,16 +321,19 @@ async function editExercise(ex, allExercises) {
       errorEl.hidden = false;
       return undefined; // ダイアログを閉じない
     }
+    // 1.0.1 までの assist の印は kind に置き換える
+    const { assist: _oldAssist, ...base } = ex ?? {
+      id: uid(),
+      order: allExercises.reduce((m, o) => Math.max(m, o.order), -1) + 1,
+      hidden: false,
+    };
     return {
-      ...(ex ?? {
-        id: uid(),
-        order: allExercises.reduce((m, o) => Math.max(m, o.order), -1) + 1,
-        hidden: false,
-      }),
+      ...base,
       name,
       part: part.get(),
+      kind: kind.get(),
       step: Number(step.get()),
-      assist: assist.checked,
+      note: noteInput.value.trim(),
       hidden: isNew ? false : hidden.checked,
     };
   };
@@ -283,7 +352,6 @@ async function editExercise(ex, allExercises) {
   toast(isNew ? `「${result.name}」を追加しました` : '保存しました');
   return true;
 }
-
 function themeSection(theme) {
   const seg = segmented(
     [

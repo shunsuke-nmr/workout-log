@@ -4,13 +4,14 @@ import { PARTS, PART_LABEL, REP_RANGE, WEEKLY_SET_GUIDE } from '../defaults.js';
 import { SCHEMA_VERSION, STORES, migrate, findInvalid } from './migrate.js';
 import { exerciseHistory, bestSet, stagnation, compareSessions, compareSets } from './progression.js';
 import { weeklySetsByPart } from './stats.js';
-import { fmtNum, fmtSet, weekdayOf, toDateStr, daysBetween } from '../util.js';
+import { fmtNum, weekdayOf, toDateStr, daysBetween } from '../util.js';
+import { exKind, fmtSetKind, kindSuffix } from './kinds.js';
 
 export const APP_ID = 'workout-log';
 
 // ───────── 分析用の文章 ─────────
 
-const exLabel = (ex) => (ex.assist ? `${ex.name}（補助）` : ex.name);
+const exLabel = (ex) => ex.name + kindSuffix(exKind(ex));
 
 /** Claude などに貼って分析してもらいやすい Markdown 形式の文章 */
 export function analysisText(data, today) {
@@ -26,10 +27,13 @@ export function analysisText(data, today) {
   const lines = [];
 
   lines.push(`# 筋トレ記録（書き出し日：${today}）`, '');
-  lines.push('- 単位：重さは kg、回数は回。セットは「重さ×回数」で表記');
+  lines.push('- 単位：重さは kg、回数は回。セットは「重さ×回数」で表記（自重の種目は「回数」、加重したときは「+加重×回数」）');
   lines.push(`- 進め方：${REP_RANGE.min}〜${REP_RANGE.max}回で3セットが基本。全セット${REP_RANGE.max}回できたら次回は重さを一段階上げて${REP_RANGE.min}回から`);
-  if (exercises.some((e) => e.assist)) {
-    lines.push('- 「（補助）」が付いた種目は補助の重さを記録しているため、重さが小さいほど良い記録。全セット' + REP_RANGE.max + '回できたら補助を一段階減らす');
+  if (exercises.some((e) => exKind(e) === 'assist')) {
+    lines.push(`- 「（補助）」が付いた種目は補助の重さを記録しているため、重さが小さいほど良い記録。全セット${REP_RANGE.max}回できたら補助を一段階減らす`);
+  }
+  if (exercises.some((e) => exKind(e) === 'bodyweight')) {
+    lines.push('- 「（自重）」が付いた種目は回数を記録し、回数を1回ずつ増やしていく');
   }
   if (trained.length) {
     lines.push(`- 期間：${trained[0].date} 〜 ${trained.at(-1).date}（トレーニング ${trained.length}回）`);
@@ -43,11 +47,13 @@ export function analysisText(data, today) {
   for (const ex of exercises) {
     const hist = exerciseHistory(data, ex.id);
     if (hist.length === 0) continue;
-    const st = stagnation(hist, ex.assist);
-    const first = bestSet(hist[0].sets, ex.assist);
-    const latest = bestSet(hist.at(-1).sets, ex.assist);
+    const kind = exKind(ex);
+    const fmt = (x) => fmtSetKind(kind, x);
+    const st = stagnation(hist, kind);
+    const first = bestSet(hist[0].sets, kind);
+    const latest = bestSet(hist.at(-1).sets, kind);
     const state = st.stalled ? `停滞中（${st.streak}回更新なし）` : st.streak === 0 ? '更新中' : `${st.streak}回更新なし`;
-    lines.push(`| ${exLabel(ex)} | ${PART_LABEL[ex.part] ?? ex.part} | ${hist.length} | ${fmtSet(first)} | ${fmtSet(latest)} | ${fmtSet(st.best)} | ${state} |`);
+    lines.push(`| ${exLabel(ex)} | ${PART_LABEL[ex.part] ?? ex.part} | ${hist.length} | ${fmt(first)} | ${fmt(latest)} | ${fmt(st.best)} | ${state} |`);
   }
   lines.push('');
 
@@ -70,7 +76,9 @@ export function analysisText(data, today) {
       byEx.get(s.exerciseId).push(s);
     }
     for (const [exId, sets] of byEx) {
-      lines.push(`- ${exById.has(exId) ? exLabel(exById.get(exId)) : '（削除された種目）'}：${sets.sort(compareSets).map(fmtSet).join(', ')}`);
+      const ex = exById.get(exId);
+      const kind = exKind(ex);
+      lines.push(`- ${ex ? exLabel(ex) : '（削除された種目）'}：${sets.sort(compareSets).map((s) => fmtSetKind(kind, s)).join(', ')}`);
     }
     lines.push('');
   }
@@ -87,6 +95,21 @@ export function analysisText(data, today) {
     }
   }
   return `${lines.join('\n')}\n`;
+}
+
+// ───────── 初期種目の追加 ─────────
+
+/**
+ * 初期種目のうち、今の種目に id も名前もないものを返す（並び順は今の種目の後ろ）。
+ * 利用者が「足りない初期種目を追加」を押したときだけ使い、今の種目は変えない。
+ */
+export function missingDefaults(current, defaults) {
+  const ids = new Set(current.map((e) => e.id));
+  const names = new Set(current.map((e) => e.name));
+  let next = current.reduce((m, e) => Math.max(m, e.order), -1) + 1;
+  return defaults
+    .filter((d) => !ids.has(d.id) && !names.has(d.name))
+    .map((d) => ({ ...d, order: next++ }));
 }
 
 // ───────── バックアップ ─────────

@@ -6,7 +6,8 @@ import { editSessionDate, editSet } from '../ui/editors.js';
 import { compareSessions, compareSets } from '../logic/progression.js';
 import { sessionSummaries } from '../logic/stats.js';
 import { PART_LABEL } from '../defaults.js';
-import { formatDate, fmtNum, fmtSet, parseDate } from '../util.js';
+import { formatDate, parseDate } from '../util.js';
+import { exKind, fmtSetKind, fmtBestKind } from '../logic/kinds.js';
 
 export const title = '履歴';
 
@@ -54,7 +55,8 @@ function detail(data, session, rerender) {
     if (!byEx.has(s.exerciseId)) byEx.set(s.exerciseId, []);
     byEx.get(s.exerciseId).push(s);
   }
-  const volume = sets.reduce((sum, s) => sum + s.weight * s.reps, 0);
+  // 総負荷量は通常の種目だけで数える（補助・自重の重さは負荷の大きさを表さないため）
+  const volume = sets.filter((s) => exKind(exById.get(s.exerciseId)) === 'weight').reduce((sum, s) => sum + s.weight * s.reps, 0);
 
   return h('div', {},
     h('div', { class: 'detail-head' },
@@ -63,19 +65,21 @@ function detail(data, session, rerender) {
         if (await editSessionDate(session)) rerender();
       }, 'btn-ghost', { 'aria-label': `日付 ${formatDate(session.date, true)}。押すと変更` }),
     ),
-    h('p', { class: 'muted small' }, `${sets.length}セット・総負荷量 ${fmtNum(Math.round(volume)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}kg`),
+    h('p', { class: 'muted small' }, `${sets.length}セット・総負荷量 ${Math.round(volume).toLocaleString('ja-JP')}kg`),
     sets.length === 0 ? h('p', { class: 'muted' }, 'この日の記録はありません') : null,
     [...byEx].map(([exId, exSets]) => {
       const ex = exById.get(exId);
+      const kind = exKind(ex);
+      const kindLabel = kind === 'assist' ? '補助の重さ' : kind === 'bodyweight' ? '自重' : null;
       exSets.sort(compareSets);
       return h('section', { class: 'card' },
         h('h2', {}, ex?.name ?? '（削除された種目）', ' ', ex ? h('span', { class: 'badge' }, PART_LABEL[ex.part] ?? '') : null,
-          ex?.assist ? [' ', h('span', { class: 'badge badge-assist' }, '補助の重さ')] : null),
+          kindLabel ? [' ', h('span', { class: 'badge badge-assist' }, kindLabel)] : null),
         h('div', { class: 'set-list' }, exSets.map((s, i) => button(
-          [h('span', { class: 'set-no' }, `${i + 1}`), fmtSet(s)],
+          [h('span', { class: 'set-no' }, `${i + 1}`), fmtSetKind(kind, s)],
           async () => { if (await editSet(s, ex, i)) rerender(); },
           'set-chip',
-          { 'aria-label': `${i + 1}セット目 ${fmtNum(s.weight)}キロ ${s.reps}回。押すと修正` },
+          { 'aria-label': `${i + 1}セット目 ${fmtBestKind(kind, s)}。押すと修正` },
         ))),
       );
     }),

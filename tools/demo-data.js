@@ -3,6 +3,7 @@
 
 import { DEFAULT_EXERCISES, REP_RANGE } from '../js/defaults.js';
 import { addDays, todayStr, mondayOf, parseDate, round2 } from '../js/util.js';
+import { exKind } from '../js/logic/kinds.js';
 
 // 同じ結果になる疑似乱数（毎回同じスクリーンショットになるように）
 function rng(seed) {
@@ -80,7 +81,7 @@ export function buildDemoData(weeks = 10) {
       if (exId === STALL_ID && stallPhase) return; // 伸びない
       if (st.reps.every((r) => r >= REP_RANGE.max)) {
         // 全セット上限なら重さを進める（補助の種目は補助を減らす）
-        st.weight = round2(ex.assist ? Math.max(0, st.weight - ex.step) : st.weight + ex.step);
+        st.weight = round2(exKind(ex) === 'assist' ? Math.max(0, st.weight - ex.step) : st.weight + ex.step);
         st.reps = [REP_RANGE.min + 1, REP_RANGE.min, REP_RANGE.min - 1];
       } else {
         st.reps = st.reps.map((r) => Math.min(REP_RANGE.max, r + (rand() < 0.75 ? 1 : 0)));
