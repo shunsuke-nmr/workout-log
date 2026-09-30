@@ -10,6 +10,8 @@ export const APP_ID = 'workout-log';
 
 // ───────── 分析用の文章 ─────────
 
+const exLabel = (ex) => (ex.assist ? `${ex.name}（補助）` : ex.name);
+
 /** Claude などに貼って分析してもらいやすい Markdown 形式の文章 */
 export function analysisText(data, today) {
   const exercises = [...data.exercises].sort((a, b) => a.order - b.order);
@@ -26,6 +28,9 @@ export function analysisText(data, today) {
   lines.push(`# 筋トレ記録（書き出し日：${today}）`, '');
   lines.push('- 単位：重さは kg、回数は回。セットは「重さ×回数」で表記');
   lines.push(`- 進め方：${REP_RANGE.min}〜${REP_RANGE.max}回で3セットが基本。全セット${REP_RANGE.max}回できたら次回は重さを一段階上げて${REP_RANGE.min}回から`);
+  if (exercises.some((e) => e.assist)) {
+    lines.push('- 「（補助）」が付いた種目は補助の重さを記録しているため、重さが小さいほど良い記録。全セット' + REP_RANGE.max + '回できたら補助を一段階減らす');
+  }
   if (trained.length) {
     lines.push(`- 期間：${trained[0].date} 〜 ${trained.at(-1).date}（トレーニング ${trained.length}回）`);
   }
@@ -33,16 +38,16 @@ export function analysisText(data, today) {
 
   // 種目ごとの要約
   lines.push('## 種目ごとの要約', '');
-  lines.push('| 種目 | 部位 | 記録した回数 | 初回の最高 | 最新の最高 | 自己ベスト | 状態 |');
+  lines.push('| 種目 | 部位 | 記録した回数 | 初回の一番良いセット | 最新の一番良いセット | 自己ベスト | 状態 |');
   lines.push('|---|---|---|---|---|---|---|');
   for (const ex of exercises) {
     const hist = exerciseHistory(data, ex.id);
     if (hist.length === 0) continue;
-    const st = stagnation(hist);
-    const first = bestSet(hist[0].sets);
-    const latest = bestSet(hist.at(-1).sets);
+    const st = stagnation(hist, ex.assist);
+    const first = bestSet(hist[0].sets, ex.assist);
+    const latest = bestSet(hist.at(-1).sets, ex.assist);
     const state = st.stalled ? `停滞中（${st.streak}回更新なし）` : st.streak === 0 ? '更新中' : `${st.streak}回更新なし`;
-    lines.push(`| ${ex.name} | ${PART_LABEL[ex.part] ?? ex.part} | ${hist.length} | ${fmtSet(first)} | ${fmtSet(latest)} | ${fmtSet(st.best)} | ${state} |`);
+    lines.push(`| ${exLabel(ex)} | ${PART_LABEL[ex.part] ?? ex.part} | ${hist.length} | ${fmtSet(first)} | ${fmtSet(latest)} | ${fmtSet(st.best)} | ${state} |`);
   }
   lines.push('');
 
@@ -65,7 +70,7 @@ export function analysisText(data, today) {
       byEx.get(s.exerciseId).push(s);
     }
     for (const [exId, sets] of byEx) {
-      lines.push(`- ${exById.get(exId)?.name ?? '（削除された種目）'}：${sets.sort(compareSets).map(fmtSet).join(', ')}`);
+      lines.push(`- ${exById.has(exId) ? exLabel(exById.get(exId)) : '（削除された種目）'}：${sets.sort(compareSets).map(fmtSet).join(', ')}`);
     }
     lines.push('');
   }

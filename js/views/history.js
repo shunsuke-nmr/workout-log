@@ -69,7 +69,8 @@ function detail(data, session, rerender) {
       const ex = exById.get(exId);
       exSets.sort(compareSets);
       return h('section', { class: 'card' },
-        h('h2', {}, ex?.name ?? '（削除された種目）', ' ', ex ? h('span', { class: 'badge' }, PART_LABEL[ex.part] ?? '') : null),
+        h('h2', {}, ex?.name ?? '（削除された種目）', ' ', ex ? h('span', { class: 'badge' }, PART_LABEL[ex.part] ?? '') : null,
+          ex?.assist ? [' ', h('span', { class: 'badge badge-assist' }, '補助の重さ')] : null),
         h('div', { class: 'set-list' }, exSets.map((s, i) => button(
           [h('span', { class: 'set-no' }, `${i + 1}`), fmtSet(s)],
           async () => { if (await editSet(s, ex, i)) rerender(); },

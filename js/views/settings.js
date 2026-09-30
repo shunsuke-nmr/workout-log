@@ -193,7 +193,7 @@ function exerciseSection(exercises, rerender) {
     h('li', { class: 'list-item' },
       h('div', { class: 'list-main' },
         h('div', { class: 'name' }, e.name, e.hidden ? ' ' : null, e.hidden ? h('span', { class: 'badge' }, '非表示') : null),
-        h('div', { class: 'sub' }, `${PART_LABEL[e.part] ?? e.part}・${fmtNum(e.step)}kg刻み`),
+        h('div', { class: 'sub' }, `${PART_LABEL[e.part] ?? e.part}・${fmtNum(e.step)}kg刻み${e.assist ? '・補助の重さ' : ''}`),
       ),
       button('↑', () => move(i, -1), 'icon-btn', { 'aria-label': `${e.name}を上へ`, disabled: i === 0 }),
       button('↓', () => move(i, 1), 'icon-btn', { 'aria-label': `${e.name}を下へ`, disabled: i === list.length - 1 }),
@@ -230,6 +230,7 @@ async function editExercise(ex, allExercises) {
   const part = segmented(PARTS.map((p) => ({ value: p.id, label: p.label })), ex?.part ?? 'back');
   const step = segmented(WEIGHT_STEPS.map((s) => ({ value: s, label: fmtNum(s) })), ex?.step ?? 2.5);
   const hidden = h('input', { type: 'checkbox', checked: !!ex?.hidden });
+  const assist = h('input', { type: 'checkbox', checked: !!ex?.assist });
   const errorEl = h('p', { class: 'error small', role: 'alert' });
   errorEl.hidden = true;
 
@@ -237,6 +238,7 @@ async function editExercise(ex, allExercises) {
     h('label', { class: 'field' }, h('span', { class: 'field-label' }, '名前'), nameInput),
     h('div', { class: 'field' }, h('span', { class: 'field-label' }, '部位'), part.el),
     h('div', { class: 'field' }, h('span', { class: 'field-label' }, '重さの刻み（kg）'), step.el),
+    h('label', { class: 'check' }, assist, '補助の重さを入れる種目（アシスト懸垂など。軽いほど良い記録）'),
     isNew ? null : h('label', { class: 'check' }, hidden, '記録画面に表示しない'),
     errorEl,
   );
@@ -262,6 +264,7 @@ async function editExercise(ex, allExercises) {
       name,
       part: part.get(),
       step: Number(step.get()),
+      assist: assist.checked,
       hidden: isNew ? false : hidden.checked,
     };
   };

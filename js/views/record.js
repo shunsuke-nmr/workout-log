@@ -83,10 +83,13 @@ function recordScreen(data, session, rerender) {
   const past = history.filter((e) => e.session.id !== session.id);
   const todaySets = sessionSets.filter((s) => s.exerciseId === ex.id).sort(compareSets);
   const prev = previousEntry(history, session);
-  const target = suggestTarget(prev?.sets, ex.step);
-  const pastBest = bestSet(past.flatMap((e) => e.sets));
-  const todayBest = bestSet(todaySets);
-  const stall = stagnation(past);
+  // 補助の重さを入れる種目（アシスト懸垂など）は、重さが小さいほど良い
+  const assist = !!ex.assist;
+  const target = suggestTarget(prev?.sets, ex.step, assist);
+  const pastBest = bestSet(past.flatMap((e) => e.sets), assist);
+  const todayBest = bestSet(todaySets, assist);
+  const stall = stagnation(past, assist);
+  const wLabel = assist ? '補助' : '';
 
   const key = `${session.id}:${ex.id}`;
   if (!inputs.has(key)) {
@@ -110,8 +113,8 @@ function recordScreen(data, session, rerender) {
       };
       await put('sets', set);
       await setMeta('activeSessionId', session.id);
-      const bestSoFar = isBetter(todayBest, pastBest) ? todayBest : pastBest;
-      toast(pastBest && isBetter(set, bestSoFar) ? `自己ベスト更新！ ${fmtSet(set)}` : `記録しました ${fmtSet(set)}`);
+      const bestSoFar = isBetter(todayBest, pastBest, assist) ? todayBest : pastBest;
+      toast(pastBest && isBetter(set, bestSoFar, assist) ? `自己ベスト更新！ ${fmtSet(set)}` : `記録しました ${fmtSet(set)}`);
       await rerender();
     } finally {
       busy = false;
@@ -123,6 +126,7 @@ function recordScreen(data, session, rerender) {
     button(formatDate(session.date), async () => { if (await editSessionDate(session)) rerender(); }, 'btn-ghost rec-date', {
       'aria-label': `日付 ${formatDate(session.date)}。押すと変更`,
     }),
+    assist ? h('span', { class: 'badge badge-assist' }, '補助の重さ・軽いほど良い') : null,
     h('span', { class: 'muted small' }, `今日 ${sessionSets.length}セット`),
   );
 
@@ -151,17 +155,17 @@ function recordScreen(data, session, rerender) {
     h('dd', { class: 'num' },
       target
         ? [
-          target.kind === 'up' ? h('span', { class: 'badge badge-good' }, '重さアップ') : null,
+          target.kind === 'up' ? h('span', { class: 'badge badge-good' }, assist ? '補助を減らす' : '重さアップ') : null,
           ' ',
           target.sets.map((t, i) => h('span', {
-            class: `tset${meetsTarget(todaySets[i], t) ? ' done' : ''}`,
+            class: `tset${meetsTarget(todaySets[i], t, assist) ? ' done' : ''}`,
           }, fmtSet(t))),
         ]
         : h('span', { class: 'muted' }, '記録すると次回から提案します')),
     h('dt', {}, '自己ベスト'),
     h('dd', { class: 'num' },
-      pastBest ? `${fmtNum(pastBest.weight)}kg × ${pastBest.reps}回` : 'なし',
-      todayBest && pastBest && isBetter(todayBest, pastBest) ? [' ', h('span', { class: 'badge badge-good' }, `今日更新 ${fmtSet(todayBest)}`)] : null,
+      pastBest ? `${wLabel}${fmtNum(pastBest.weight)}kg × ${pastBest.reps}回` : 'なし',
+      todayBest && pastBest && isBetter(todayBest, pastBest, assist) ? [' ', h('span', { class: 'badge badge-good' }, `今日更新 ${fmtSet(todayBest)}`)] : null,
       stall.stalled ? [' ', h('span', { class: 'badge badge-warn' }, `停滞中（${stall.streak}回更新なし）`)] : null,
     ),
   );
@@ -170,15 +174,15 @@ function recordScreen(data, session, rerender) {
   const today = h('div', { class: 'today', 'aria-label': '今日のセット' },
     todaySets.length
       ? todaySets.map((s, i) => button([h('span', { class: 'set-no' }, `${i + 1}`), fmtSet(s)], async () => { if (await editSet(s, ex, i)) rerender(); }, 'set-chip', {
-        'aria-label': `${i + 1}セット目 ${fmtNum(s.weight)}キロ ${s.reps}回。押すと修正`,
+        'aria-label': `${i + 1}セット目 ${wLabel}${fmtNum(s.weight)}キロ ${s.reps}回。押すと修正`,
       }))
       : h('p', { class: 'muted small today-empty' }, '重さと回数を合わせて「セット追加」'),
   );
 
   // ── 下半分：入力とボタン ──
   const weight = stepper({
-    value: input.weight, step: () => ex.step, min: 0, max: 500, label: '重さ',
-    format: (v) => `${fmtNum(v)} kg`, onChange: (v) => { input.weight = v; },
+    value: input.weight, step: () => ex.step, min: 0, max: 500, label: assist ? '補助の重さ' : '重さ',
+    format: (v) => (assist ? `補助 ${fmtNum(v)} kg` : `${fmtNum(v)} kg`), onChange: (v) => { input.weight = v; },
   });
   const reps = stepper({
     value: input.reps, step: () => 1, min: 1, max: 100, label: '回数',

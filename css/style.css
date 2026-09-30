@@ -331,6 +331,17 @@ p { margin: 0 0 var(--gap); }
   background: var(--bg);
   font-size: 16px; /* 16px 未満だと iPhone で入力時に拡大される */
 }
+/* iPhone の Safari では日付欄が独自の最小幅を持ち、枠からはみ出すので標準の見た目を外す */
+.text-input[type="date"] {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1.5;
+}
+.text-input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+.badge-assist { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
 .check {
   display: flex; align-items: center; gap: 10px; min-height: var(--tap);
 }

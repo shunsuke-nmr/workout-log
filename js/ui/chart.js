@@ -22,7 +22,8 @@ export function niceTicks(min, max, count = 4) {
   }
   const raw = (max - min) / count;
   const mag = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((st) => st >= raw);
+  // 0.25 のような読みにくい刻みを避けるため 1・2・5 の倍数だけにする
+  const step = [1, 2, 5, 10].map((m) => m * mag).find((st) => st >= raw);
   const lo = Math.floor(min / step) * step;
   const hi = Math.ceil(max / step) * step;
   const ticks = [];

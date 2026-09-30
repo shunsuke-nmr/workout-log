@@ -35,7 +35,7 @@ export async function render(root) {
 
 function stalledSection(withHistory) {
   const stalled = withHistory
-    .map((x) => ({ ...x, st: stagnation(x.history) }))
+    .map((x) => ({ ...x, st: stagnation(x.history, x.ex.assist) }))
     .filter((x) => x.st.stalled);
   return h('section', {},
     h('h2', { class: 'section-title' }, '停滞中の種目'),
@@ -45,7 +45,7 @@ function stalledSection(withHistory) {
         h('span', { class: 'badge badge-warn' }, '⚠ 停滞中'),
         h('div', { class: 'list-main' },
           h('div', { class: 'name' }, ex.name),
-          h('div', { class: 'sub' }, `最高 ${fmtNum(st.best.weight)}kg × ${st.best.reps}回から${st.streak}回更新なし`),
+          h('div', { class: 'sub' }, `最高 ${ex.assist ? '補助' : ''}${fmtNum(st.best.weight)}kg × ${st.best.reps}回から${st.streak}回更新なし`),
         ),
       ))),
   );
@@ -84,7 +84,7 @@ function exerciseSection(withHistory, rerender) {
   }
   if (!withHistory.some((x) => x.ex.id === selectedEx)) selectedEx = withHistory[0].ex.id;
   const { ex, history } = withHistory.find((x) => x.ex.id === selectedEx);
-  const series = exerciseSeries(history);
+  const series = exerciseSeries(history, ex.assist);
 
   return h('section', {},
     h('h2', { class: 'section-title' }, '種目ごとの推移'),
@@ -95,21 +95,48 @@ function exerciseSection(withHistory, rerender) {
         'aria-pressed': String(x.ex.id === ex.id),
         onclick: () => { selectedEx = x.ex.id; rerender(); },
       }, x.ex.name))),
-    h('div', { class: 'card' },
-      h('h3', { class: 'chart-title' }, '最大重量'),
-      lineChart({
-        points: series.map((p) => ({ date: p.date, value: p.maxWeight })),
-        format: kg,
-        label: `${ex.name}の最大重量の推移`,
-      }),
-    ),
-    h('div', { class: 'card' },
-      h('h3', { class: 'chart-title' }, '総負荷量（重さ×回数の合計）'),
-      lineChart({
-        points: series.map((p) => ({ date: p.date, value: p.volume })),
-        format: kgComma,
-        label: `${ex.name}の総負荷量の推移`,
-      }),
-    ),
+    ex.assist ? assistCharts(ex, series) : [
+      h('div', { class: 'card' },
+        h('h3', { class: 'chart-title' }, '最大重量'),
+        lineChart({
+          points: series.map((p) => ({ date: p.date, value: p.bestWeight })),
+          format: kg,
+          label: `${ex.name}の最大重量の推移`,
+        }),
+      ),
+      h('div', { class: 'card' },
+        h('h3', { class: 'chart-title' }, '総負荷量（重さ×回数の合計）'),
+        lineChart({
+          points: series.map((p) => ({ date: p.date, value: p.volume })),
+          format: kgComma,
+          label: `${ex.name}の総負荷量の推移`,
+        }),
+      ),
+    ],
   );
+}
+
+/**
+ * 補助の重さを入れる種目のグラフ。
+ * 補助が軽いほど良いので「最小の補助」を描き、総負荷量（重さ×回数）は意味を持たないため回数の合計にする。
+ */
+function assistCharts(ex, series) {
+  return [
+    h('div', { class: 'card' },
+      h('h3', { class: 'chart-title' }, '補助の重さ（軽いほど良い）'),
+      lineChart({
+        points: series.map((p) => ({ date: p.date, value: p.bestWeight })),
+        format: (v, axis) => (axis ? fmtNum(v) : `補助 ${fmtNum(v)}kg`),
+        label: `${ex.name}の補助の重さの推移。値が下がるほど良い`,
+      }),
+    ),
+    h('div', { class: 'card' },
+      h('h3', { class: 'chart-title' }, '回数の合計'),
+      lineChart({
+        points: series.map((p) => ({ date: p.date, value: p.totalReps })),
+        format: (v, axis) => (axis ? String(v) : `${v}回`),
+        label: `${ex.name}の回数の合計の推移`,
+      }),
+    ),
+  ];
 }

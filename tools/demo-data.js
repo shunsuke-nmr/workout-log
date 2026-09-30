@@ -1,9 +1,8 @@
 // 開発・スクリーンショット用の架空データ。実在の人物の記録ではない。
 // パソコンで簡易サーバーを動かし http://localhost:8000/?demo を開いたときだけ読み込まれる（公開先では動かない）。
 
-import { DEFAULT_EXERCISES } from '../js/defaults.js';
+import { DEFAULT_EXERCISES, REP_RANGE } from '../js/defaults.js';
 import { addDays, todayStr, mondayOf, parseDate, round2 } from '../js/util.js';
-import { REP_RANGE } from '../js/defaults.js';
 
 // 同じ結果になる疑似乱数（毎回同じスクリーンショットになるように）
 function rng(seed) {
@@ -14,21 +13,38 @@ function rng(seed) {
   };
 }
 
+// 開始時の重さ（架空）。アシスト懸垂は補助の重さ
 const START = {
   'ex-lat-pulldown': 35,
   'ex-seated-row': 35,
+  'ex-dy-row': 30,
+  'ex-assisted-pullup': 35,
   'ex-chest-press': 30,
+  'ex-decline-press': 30,
+  'ex-pec-fly': 25,
+  'ex-shoulder-press': 20,
+  'ex-rear-delt': 20,
   'ex-side-raise': 5,
-  'ex-leg-press': 80,
-  'ex-arm-curl': 12,
+  'ex-seated-leg-press': 60,
+  'ex-leg-curl': 25,
+  'ex-leg-extension': 30,
+  'ex-arm-curl': 8,
   'ex-triceps-pushdown': 20,
+  'ex-ab-crunch': 20,
 };
 // この種目は最後の数回わざと伸び悩ませる（停滞表示の確認用）
 const STALL_ID = 'ex-side-raise';
+// 1回6種目。3日で全種目を回る
+const DAYS = [
+  ['ex-lat-pulldown', 'ex-assisted-pullup', 'ex-chest-press', 'ex-shoulder-press', 'ex-seated-leg-press', 'ex-ab-crunch'],
+  ['ex-seated-row', 'ex-decline-press', 'ex-side-raise', 'ex-leg-curl', 'ex-arm-curl', 'ex-triceps-pushdown'],
+  ['ex-dy-row', 'ex-assisted-pullup', 'ex-pec-fly', 'ex-rear-delt', 'ex-leg-extension', 'ex-side-raise'],
+];
 
 export function buildDemoData(weeks = 10) {
   const rand = rng(20260401);
   const exercises = DEFAULT_EXERCISES.map((e) => ({ ...e }));
+  const exById = new Map(exercises.map((e) => [e.id, e]));
   const state = Object.fromEntries(exercises.map((e) => [e.id, { weight: START[e.id], reps: [10, 9, 8] }]));
   const sessions = [];
   const sets = [];
@@ -45,28 +61,29 @@ export function buildDemoData(weeks = 10) {
   days.forEach((date, i) => {
     const session = { id: `demo-s${i}`, date, createdAt: parseDate(date).getTime() + (7 * 60 + 10) * 60000 };
     sessions.push(session);
-    // 1回5〜6種目。日によって順番を少し変える
-    const picked = exercises.filter((_, k) => (k + i) % 7 !== 0).slice(0, 5 + (i % 2));
-    const stallPhase = i >= days.length - 5;
-    picked.forEach((ex) => {
-      const st = state[ex.id];
+    const stallPhase = i >= days.length - 9;
+    let minute = 0;
+    DAYS[i % DAYS.length].forEach((exId) => {
+      const ex = exById.get(exId);
+      const st = state[exId];
       st.reps.forEach((reps, j) => {
         sets.push({
-          id: `demo-${i}-${ex.id}-${j}`,
+          id: `demo-${i}-${exId}-${j}`,
           sessionId: session.id,
-          exerciseId: ex.id,
+          exerciseId: exId,
           weight: st.weight,
           reps,
           order: j,
-          createdAt: session.createdAt + (sets.length % 100) * 60000,
+          createdAt: session.createdAt + (minute += 2) * 60000,
         });
       });
-      if (ex.id === STALL_ID && stallPhase) return; // 伸びない
+      if (exId === STALL_ID && stallPhase) return; // 伸びない
       if (st.reps.every((r) => r >= REP_RANGE.max)) {
-        st.weight = round2(st.weight + ex.step);
+        // 全セット上限なら重さを進める（補助の種目は補助を減らす）
+        st.weight = round2(ex.assist ? Math.max(0, st.weight - ex.step) : st.weight + ex.step);
         st.reps = [REP_RANGE.min + 1, REP_RANGE.min, REP_RANGE.min - 1];
       } else {
-        st.reps = st.reps.map((r) => Math.min(REP_RANGE.max, r + (rand() < 0.6 ? 1 : 0)));
+        st.reps = st.reps.map((r) => Math.min(REP_RANGE.max, r + (rand() < 0.75 ? 1 : 0)));
       }
     });
   });

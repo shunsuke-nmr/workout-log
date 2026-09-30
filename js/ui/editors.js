@@ -24,8 +24,14 @@ export async function editSessionDate(session) {
 /** セットを修正または削除する。変えたら true */
 export async function editSet(set, exercise, index) {
   const step = exercise?.step ?? 2.5;
+  const assist = !!exercise?.assist;
   const weight = stepper({
-    value: set.weight, step: () => step, min: 0, max: 500, label: '重さ', format: (v) => `${fmtNum(v)} kg`,
+    value: set.weight,
+    step: () => step,
+    min: 0,
+    max: 500,
+    label: assist ? '補助の重さ' : '重さ',
+    format: (v) => (assist ? `補助 ${fmtNum(v)} kg` : `${fmtNum(v)} kg`),
   });
   const reps = stepper({
     value: set.reps, step: () => 1, min: 1, max: 100, label: '回数', format: (v) => `${v} 回`,

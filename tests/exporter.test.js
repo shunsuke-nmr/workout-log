@@ -71,6 +71,16 @@ test('バックアップの警告：30日以上で知らせる', () => {
   eq(backupStatus(null, false, '2026-09-30', 30).warn, false);
 });
 
+test('分析用の文章で補助の種目には（補助）を付け、自己ベストは最小の補助', () => {
+  const data = makeData([['2026-09-25', [[25, 10]]], ['2026-09-28', [[22.5, 8], [25, 12]]]]);
+  data.exercises[0].name = 'アシスト懸垂';
+  data.exercises[0].assist = true;
+  const text = analysisText(data, '2026-09-30');
+  eq(text.includes('- アシスト懸垂（補助）：22.5×8, 25×12'), true);
+  eq(text.includes('| アシスト懸垂（補助） | 背中 | 2 | 25×10 | 22.5×8 | 22.5×8 | 更新中 |'), true);
+  eq(text.includes('重さが小さいほど良い'), true);
+});
+
 test('分析用の文章に日付・種目・セット・体重が入る', () => {
   const data = makeData([['2026-09-28', [[40, 12], [40, 11]]]]);
   data.body.push({ id: 'b1', date: '2026-09-28', weightKg: 60.5, waistCm: null });

@@ -5,7 +5,7 @@
 // → 利用者が［更新］を押す → 切り替わり、古い版のキャッシュを消す。
 
 // js/version.js の APP_VERSION と同じにする（tests/version.test.js で確認）
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const CACHE_PREFIX = 'workout-log-';
 const CACHE = `${CACHE_PREFIX}v${VERSION}`;
 

@@ -4,12 +4,18 @@ import { PARTS } from '../defaults.js';
 import { addDays, mondayOf, round2 } from '../util.js';
 import { bestSet } from './progression.js';
 
-/** 種目の推移：セッションごとの最大重量と総負荷量（重さ×回数の合計） */
-export function exerciseSeries(history) {
+/**
+ * 種目の推移：セッションごとの
+ * - bestWeight：一番良い重さ（通常は最大重量、補助の種目は最小の補助）
+ * - volume：総負荷量（重さ×回数の合計）。補助の種目では意味を持たないので画面では totalReps を使う
+ * - totalReps：回数の合計
+ */
+export function exerciseSeries(history, assist = false) {
   return history.map(({ session, sets }) => ({
     date: session.date,
-    maxWeight: bestSet(sets)?.weight ?? 0,
+    bestWeight: bestSet(sets, assist)?.weight ?? 0,
     volume: round2(sets.reduce((sum, s) => sum + s.weight * s.reps, 0)),
+    totalReps: sets.reduce((sum, s) => sum + s.reps, 0),
     sets: sets.length,
   }));
 }
